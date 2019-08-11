@@ -81,7 +81,7 @@ class PreprocessedMultiframeDataset(torch.utils.data.Dataset):
         return tensors, actions
 
 
-class HDF5PreprocessedDataset(torch.utils.data.Dataset):
+class HDF5Dataset(torch.utils.data.Dataset):
     def __init__(self, h5_filepath, debug_size=None):
         self.h5_filepath = h5_filepath
         h5file = h5py.File(h5_filepath, "r")

@@ -5,14 +5,14 @@ import torchvision
 import ssb64bc.models.torch_utils
 
 
-class MultiframeMulticlassResnetActionModel(torchvision.models.ResNet):
+class MultiframeMulticlassActionModel(torchvision.models.ResNet):
     def __init__(self,
                  block=torchvision.models.resnet.BasicBlock,
                  layers=[1, 1, 1, 1],
                  n_frames=4,
                  n_channels=1,
                  **kwargs):
-        super(MultiframeMulticlassResnetActionModel, self).__init__(block, layers, **kwargs)
+        super().__init__(block, layers, **kwargs)
         in_channels = n_frames * n_channels
         self.conv1 = torch.nn.Conv2d(in_channels, 64, kernel_size=7, stride=2, padding=3, bias=False)
 
@@ -22,7 +22,7 @@ class MultiframeMulticlassResnetActionModel(torchvision.models.ResNet):
             return torch.nn.functional.softmax(logits, dim=1)
 
 
-class MultiframeMultidiscreteResnetActionModel(torchvision.models.ResNet):
+class MultiframeMultidiscreteActionModel(torchvision.models.ResNet):
     def __init__(self,
                  n_classes_per_action,
                  block=torchvision.models.resnet.BasicBlock,
@@ -32,8 +32,8 @@ class MultiframeMultidiscreteResnetActionModel(torchvision.models.ResNet):
                  **kwargs):
         self.output_dim = sum(n_classes_per_action)
         self.softmax_edges = [0] + list(np.cumsum(n_classes_per_action).astype(int))
-        kwargs["output_dim"] = self.output_dim
-        super(MultiframeMultidiscreteResnetActionModel, self).__init__(block, layers, **kwargs)
+        kwargs["num_classes"] = self.output_dim
+        super().__init__(block, layers, **kwargs)
         in_channels = n_frames * n_channels
         self.conv1 = torch.nn.Conv2d(in_channels, 64, kernel_size=7, stride=2, padding=3, bias=False)
 
@@ -60,7 +60,7 @@ def resnet_feature_extractor(feature_dim,
     return net
 
 
-class RecurrentMultiframeMulticlassActionModel(torch.nn.Module):
+class RecurrentMulticlassActionModel(torch.nn.Module):
     def __init__(self, output_dim, hidden_dim=128, dropout_prob=0.0, feature_extractor=None):
         super().__init__()
         self.output_dim = output_dim

@@ -48,9 +48,9 @@ class TestSSB64MulticlassActionFormatter(unittest.TestCase):
             self.assertEqual(actual_index, expected_index)
 
 
-class TestSSB64MultiDiscreteActionFormatter(unittest.TestCase):
+class TestSSB64MultidiscreteActionFormatter(unittest.TestCase):
     def test_action_to_index(self):
-        formatter = action_formatters.SSB64MultiDiscreteActionFormatter()
+        formatter = action_formatters.SSB64MultidiscreteActionFormatter()
         input_indices_pairs = [
             (["A_BUTTON"], (0, 0, 0)),
             (["Z_TRIG"], (3, 0, 0)),
