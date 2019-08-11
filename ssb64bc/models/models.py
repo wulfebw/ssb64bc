@@ -33,7 +33,7 @@ class MultiframeMultidiscreteResnetActionModel(torchvision.models.ResNet):
         self.output_dim = sum(n_classes_per_action)
         self.softmax_edges = [0] + list(np.cumsum(n_classes_per_action).astype(int))
         kwargs["output_dim"] = self.output_dim
-        super(MultiframeMulticlassResnetActionModel, self).__init__(block, layers, **kwargs)
+        super(MultiframeMultidiscreteResnetActionModel, self).__init__(block, layers, **kwargs)
         in_channels = n_frames * n_channels
         self.conv1 = torch.nn.Conv2d(in_channels, 64, kernel_size=7, stride=2, padding=3, bias=False)
 
