@@ -169,6 +169,10 @@ class SSB64MultiDiscreteActionFormatter:
         self.labels = SSB64MultiDiscreteActionFormatter.LABELS
 
     @staticmethod
+    def is_noop(button, y_axis, x_axis):
+        return (button == len(SSB64MultiDiscreteActionFormatter.BUTTON_KEYS) and y_axis == 0 and x_axis == 0)
+
+    @staticmethod
     def _button_action_to_index(action):
         """"Returns the integer index of the class of button pressed."""
         for i, button_key in enumerate(SSB64MultiDiscreteActionFormatter.BUTTON_KEYS):
