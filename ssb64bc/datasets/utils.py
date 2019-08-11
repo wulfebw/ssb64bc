@@ -1,3 +1,4 @@
+import cv2
 import numpy as np
 import torchvision
 
@@ -25,3 +26,8 @@ def get_image_transforms(mean=_COLOR_IMAGE_MEAN, std=[1, 1, 1], resize=224, inte
         torchvision.transforms.ToTensor(),
         torchvision.transforms.Normalize(mean, std, inplace=True)
     ])
+
+def get_image_transforms_for_encoding(encoding, resize=224, interpolation=0):
+    image_type = "color" if encoding == cv2.IMREAD_COLOR else "grayscale"
+    mean, std = get_image_mean_std(image_type)
+    return get_image_transforms(mean, std, resize, interpolation)

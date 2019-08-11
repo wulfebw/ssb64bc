@@ -17,11 +17,13 @@ import pandas as pd
 import pathlib
 import torch
 
-from ssb64bc.datasets.utils import get_image_transforms
+from ssb64bc.datasets.utils import get_image_transforms_for_encoding
 import ssb64bc.formatting.action_formatters as action_formatters
 from ssb64bc.formatting.match_data import MatchData
 from ssb64bc.formatting.multi_frame_dataset_formatter import MultiframeDatasetFormatter
 from ssb64bc.formatting.utils import IMG_EXT, get_act_counts
+
+import utils
 
 
 def balance_noops_multiclass(df, max_fraction):
@@ -91,20 +93,12 @@ def balance_noops(df, max_fraction, action_format):
         raise ValueError("Invalid action format: {}".format(action_format))
 
 
-def preprocess_image(input_filepath, output_filepath, transforms, encoding):
-    """Preprocess an image with a provided set of transforms"""
-    img = cv2.imread(input_filepath, encoding)
-    img = transforms(img)
-    torch.save(img, output_filepath)
-
-
 def preprocess_dataset(dataset_filepath,
                        img_dir,
                        output_filepath,
                        preprocess_dir,
                        overwrite=False,
-                       transforms=get_image_transforms(),
-                       encoding=cv2.IMREAD_COLOR):
+                       encoding=cv2.IMREAD_GRAYSCALE):
     """Preprocess a dataset.
 
     This function preprocesses a dataset by applying a set of transforms and
@@ -112,6 +106,8 @@ def preprocess_dataset(dataset_filepath,
     a new dataframe that contains the relative paths of the images in the 
     preprocessed directory.
     """
+    transforms = get_image_transforms_for_encoding(encoding)
+
     # Collect the list of filepaths to convert.
     df = pd.read_csv(dataset_filepath)
     img_cols = [c for c in df.columns if "frame" in c]
@@ -136,7 +132,7 @@ def preprocess_dataset(dataset_filepath,
                                               os.path.basename(relative_filename)).replace(IMG_EXT, ".pth")
 
         if overwrite or not os.path.exists(output_tensor_filepath):
-            preprocess_image(image_filepath, output_tensor_filepath, transforms, encoding)
+            utils.preprocess_and_save_image(image_filepath, output_tensor_filepath, transforms, encoding)
 
     # Create the modified dataframe.
     tensor_df = df
@@ -144,15 +140,6 @@ def preprocess_dataset(dataset_filepath,
         tensor_df[c] = [f.replace(IMG_EXT, ".pth") for f in tensor_df[c]]
 
     tensor_df.to_csv(output_filepath, index=False)
-
-
-def get_action_formatter(action_format):
-    if action_format == "multiclass":
-        return action_formatters.SSB64MulticlassActionFormatter()
-    elif action_format == "multidiscrete":
-        return action_formatters.SSB64MultiDiscreteActionFormatter()
-    else:
-        raise ValueError("Invalid action format: {}".format(action_format))
 
 
 def format_match(match_dir, args):
@@ -165,7 +152,7 @@ def format_match(match_dir, args):
     print("Match dir: {}".format(match_dir))
     assert os.path.exists(match_dir), "{}".format(match_dir)
 
-    match_key = os.path.split(os.path.normpath(match_dir))[-1]
+    match_key = utils.match_key_from_match_dir(match_dir)
     match_data = MatchData(match_dir)
 
     os.makedirs(args.dataset_dir, exist_ok=True)
@@ -173,24 +160,12 @@ def format_match(match_dir, args):
 
     if args.overwrite_formatting or not os.path.exists(output_filepath):
         print("Formatting...")
-        action_formatter = get_action_formatter(args.action_format)
-        formatter = MultiframeDatasetFormatter(match_data, action_formatter)
+        action_formatter = action_formatters.get_action_formatter(args.action_format)
+        formatter = MultiframeDatasetFormatter(match_data, action_formatter, n_frames=args.n_frames)
         df = formatter.to_df()
         df.to_csv(output_filepath, index=False)
 
-    if args.noop_max_dataset_fraction is not None:
-        print("Reducing NOOPs...")
-        df = pd.read_csv(output_filepath)
-        df = balance_noops(df, args.noop_max_dataset_fraction, args.action_format)
-        df.to_csv(output_filepath, index=False)
-
-    if args.preprocess_dataset:
-        print("Preprocessing...")
-        img_dir = os.path.dirname(os.path.normpath(match_dir))
-        assert os.path.exists(img_dir)
-        preprocess_dataset_filepath = os.path.join(args.dataset_dir, "preprocessed_{}.csv".format(match_key))
-        preprocess_dataset(output_filepath, img_dir, preprocess_dataset_filepath, args.dataset_dir,
-                           args.overwrite_preprocessing)
+    return output_filepath
 
 
 def get_parser():
@@ -219,6 +194,7 @@ def get_parser():
     parser.add_argument('--overwrite_preprocessing',
                         action="store_true",
                         help="Whether to redo preprocessing if it already exists.")
+    parser.add_argument('--n_frames', type=int, help=("Number of frames to use in a sample."), default=4)
     parser.add_argument('--noop_max_dataset_fraction',
                         type=float,
                         help=("If provided, balances noops such that they"
@@ -233,7 +209,24 @@ def main():
     args = get_parser().parse_args()
     assert os.path.exists(args.dataset_dir)
     for match_dir in args.match_dirs:
-        format_match(match_dir, args)
+        dataset_filepath = format_match(match_dir, args)
+
+        if args.noop_max_dataset_fraction is not None:
+            print("Reducing NOOPs...")
+            df = pd.read_csv(dataset_filepath)
+            df = balance_noops(df, args.noop_max_dataset_fraction, args.action_format)
+            # Overwrite the dataset filepath.
+            df.to_csv(dataset_filepath, index=False)
+
+        if args.preprocess_dataset:
+            print("Preprocessing...")
+            img_dir = os.path.dirname(os.path.normpath(match_dir))
+            assert os.path.exists(img_dir)
+            match_key = utils.match_key_from_match_dir(match_dir)
+            preprocess_dataset_filepath = os.path.join(args.dataset_dir,
+                                                       "preprocessed_{}.csv".format(match_key))
+            preprocess_dataset(dataset_filepath, img_dir, preprocess_dataset_filepath, args.dataset_dir,
+                               args.overwrite_preprocessing)
 
 
 if __name__ == "__main__":
