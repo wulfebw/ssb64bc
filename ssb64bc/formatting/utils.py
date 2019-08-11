@@ -20,10 +20,22 @@ def get_image_encoding(image_type):
     else:
         raise ValueError("invalid image type {}".format(args.image_type))
 
+def get_frame_cols(df):
+    """Returns the columns associated with frames."""
+    return [c for c in df.columns if "frame" in c]
 
 def get_act_cols(df):
-    # Assumes that only actions are all upper case.
-    return [c for c in df.columns if c.upper() == c]
+    """Uses some simple (brittle) logic to figure out the action format,
+    and returns the columns that correspond to actions.
+    """
+    if "button" in df.columns:
+        # Multidiscrete case.
+        return ["button", "y_axis", "x_axis"]
+    elif "NOOP" in df.columns:
+        # Assumes that only actions are all upper case.
+        return [c for c in df.columns if c.upper() == c]
+    else:
+        raise ValueError("Action format not recognized; columns: {}".format(df.columns))
 
 
 def get_act_counts(df):

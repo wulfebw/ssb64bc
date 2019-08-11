@@ -266,3 +266,13 @@ class SSB64MultiDiscreteActionFormatter:
         action += [SSB64MultiDiscreteActionFormatter._y_axis_index_to_action(indices[1])]
         action += SSB64MultiDiscreteActionFormatter._button_index_to_action(indices[0])
         return action
+
+
+def get_action_formatter(action_format):
+    """This function returns the associated action formatter based on string name."""
+    if action_format == "multiclass":
+        return SSB64MulticlassActionFormatter()
+    elif action_format == "multidiscrete":
+        return SSB64MultiDiscreteActionFormatter()
+    else:
+        raise ValueError("Invalid action format: {}".format(action_format))
