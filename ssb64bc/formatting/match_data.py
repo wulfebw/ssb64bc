@@ -6,11 +6,12 @@ import sys
 
 import pandas as pd
 
+from ssb64bc.formatting.utils import IMG_EXT
+
 
 @functools.total_ordering
 class ImgFile:
     """A single image file and associated timestamp."""
-    IMG_EXT = ".png"
 
     def __init__(self, filepath):
         self.filepath = filepath
@@ -23,7 +24,7 @@ class ImgFile:
     @staticmethod
     def _parse_timestamp(filepath):
         basename = os.path.basename(filepath)
-        return int(basename.replace(self.IMG_EXT, ""))
+        return int(basename.replace(IMG_EXT, ""))
 
     def __eq__(self, other):
         return self.timestamp == other.timestamp and self.filepath == other.filepath
