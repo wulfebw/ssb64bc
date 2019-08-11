@@ -155,3 +155,6 @@ auto-save-list
 tramp
 .\#*
 .style*
+
+# ignore scratch directory
+*scratch* 
