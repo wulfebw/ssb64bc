@@ -1,4 +1,5 @@
 import datetime
+import json
 import multiprocessing as mp
 import os
 import sys
@@ -58,6 +59,11 @@ def load_action_names(args):
         return list(get_act_cols(df))
     else:
         return []
+
+
+def save_json(filepath, d):
+    with open(filepath, "w") as outfile:
+        json.dump(d, outfile, indent=2)
 
 
 """Dataset and weights utils."""
@@ -134,15 +140,20 @@ def get_multidiscrete_loss(n_classes_per_action, device, dataset_filepath):
 
 
 def get_metrics(args, criterion):
-    precision = ignite.metrics.Precision(average=False)
-    recall = ignite.metrics.Recall(average=False)
-    f1 = ((precision * recall * 2) / (precision + recall + 1e-8)).mean()
-    return dict(loss=ignite.metrics.Loss(criterion),
-                accuracy=ignite.metrics.Accuracy(),
-                top_5_accuracy=ignite.metrics.TopKCategoricalAccuracy(k=5),
-                precision=precision,
-                recall=recall,
-                f1=f1)
+    if args.model_type == "multiclass":
+        precision = ignite.metrics.Precision(average=False)
+        recall = ignite.metrics.Recall(average=False)
+        f1 = ((precision * recall * 2) / (precision + recall + 1e-8)).mean()
+        return dict(loss=ignite.metrics.Loss(criterion),
+                    accuracy=ignite.metrics.Accuracy(),
+                    top_5_accuracy=ignite.metrics.TopKCategoricalAccuracy(k=5),
+                    precision=precision,
+                    recall=recall,
+                    f1=f1)
+    elif args.model_type == "multidiscrete":
+        return dict(loss=ignite.metrics.Loss(criterion))
+    else:
+        raise ValueError("invalid model type: {}".format(args.model_type))
 
 
 def _prepare_batch(batch, device=None, non_blocking=False):
@@ -273,7 +284,7 @@ def score_function(engine):
 def get_model_checkpoint_handler(args):
     os.makedirs(args.exp_directory, exist_ok=True)
     return ignite.handlers.ModelCheckpoint(os.path.join(args.exp_directory, "networks"),
-                                           filename_prefix=args.save_prefix,
+                                           filename_prefix="ssb64",
                                            score_function=score_function,
                                            score_name="loss",
                                            n_saved=10,
