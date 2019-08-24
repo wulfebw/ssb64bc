@@ -202,7 +202,7 @@ def get_parser():
                               "For example, .2 would mean at most 20% of the dataset is noops."),
                         required=False,
                         default=0.1)
-   return parser
+    return parser
 
 
 def main():
