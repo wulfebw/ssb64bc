@@ -126,7 +126,7 @@ class SSB64MulticlassActionFormatter:
         return i2a_map[idx]
 
 
-class SSB64MultidiscreteActionFormatter:
+class SSB64MultiDiscreteActionFormatter:
     """Formats actions as three discrete classes.
 
     1. The button pressed

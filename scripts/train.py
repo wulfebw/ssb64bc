@@ -13,12 +13,12 @@ import ssb64bc.formatting.utils as formatting_utils
 import ssb64bc.models.models as models
 from ssb64bc.nn.sequence_loss import SequenceLoss
 
+import hparams
 import train_utils
 
 
 def get_parser():
     parser = argparse.ArgumentParser()
-    # Dataset and data loader args.
     parser.add_argument('--train_dataset_filepath',
                         type=str,
                         help="Filepath of train dataset csv file.",
@@ -28,72 +28,22 @@ def get_parser():
                         help="Filepath of val dataset csv file.",
                         required=True)
     parser.add_argument(
-        '--img_directory',
-        type=str,
-        help="Directory from which image filepaths in datasets are defined; assumed same for train and val.",
-        required=False)
-    parser.add_argument('--debug_size',
-                        type=int,
-                        default=None,
-                        help="If set uses an in memory dataset containing this many samples.")
-    parser.add_argument('--val_debug_size',
-                        type=int,
-                        default=None,
-                        help="If set uses an in memory dataset containing this many samples for validation.")
-    parser.add_argument('--batch_size', type=int, default=128, help="Batch size for both train and val.")
-    parser.add_argument('--dont_shuffle', action='store_true', help="Doesn't shuffle datasets if provided.")
-    parser.add_argument('--dataset_type', type=str, default="images", help="Type of dataset to use.")
-    parser.add_argument('--image_type',
-                        type=str,
-                        help="Whether to use color or grayscale images.",
-                        required=True)
-
-    # Training args.
-    parser.add_argument('--load_filepath',
-                        type=str,
-                        help="If set, load the network state dict in the file.",
-                        default=None)
-    parser.add_argument('--model_type', type=str, help="{multiclass, multidiscrete}.", default="multiclass")
-    parser.add_argument('--recurrent_dropout_prob',
-                        type=float,
-                        help=("Dropout probability used with the RNN (if applicable). "
-                              "More precisely, this value is used for 'variational dropout' "
-                              "of the input and output of the RNN, as well as for "
-                              "The drop probability of DropConnect applied to the "
-                              "hidden-to-hidden connections of the RNN."),
-                        default=0.0)
-    parser.add_argument('--opt_type', type=str, help="{adam, sgd, asgd}.", default="sgd")
-    parser.add_argument('--opt_lr', type=float, default=0.01, help="Initial learning rate.")
-    parser.add_argument('--opt_momentum', type=float, default=0.9, help="Momentum to use with sgd.")
-    parser.add_argument('--opt_weight_decay', type=float, default=1e-4, help="L2 weight.")
-    parser.add_argument('--grad_clip',
-                        type=float,
-                        default=1.0,
-                        help="Clip the magnitude of gradients elementwise to this value.")
-    parser.add_argument('--grad_norm',
-                        type=float,
-                        default=1000000.0,
-                        help="Rescale the norm of gradients globally to be less than this norm.")
-    parser.add_argument('--lr_cycle_ratio',
-                        type=float,
-                        default=0.1,
-                        help="Ratio of start to end lr for an epoch.")
-    parser.add_argument('--lr_cycle_decay',
-                        type=float,
-                        default=0.99,
-                        help="Exponential decay of learning rate each epoch (1.0 == no decay).")
-    parser.add_argument('--early_stopping_patience',
-                        type=int,
-                        default=50,
-                        help="Number of epochs without val improvement to continue training.")
-    parser.add_argument('--max_epochs', type=int, default=500, help="Max epochs to run training.")
-    parser.add_argument(
         '--exp_directory',
         type=str,
         help="Experiment directory in which to save network weights and other logging information.",
         required=True)
-    parser.add_argument('--save_prefix', type=str, help="Prefix for network save filenames.", default="ssb64")
-
+    parser.add_argument('--img_directory',
+                        type=str,
+                        help="The directory relative to which the image paths are defined.",
+                        default="../data/matches")
+    parser.add_argument('--load_filepath',
+                        type=str,
+                        help="If set, load the network state dict from this filepath.",
+                        default=None)
+    parser.add_argument('--hparams',
+                        type=str,
+                        help="Comma-separated values to pass to hparams (key=value,...)",
+                        default=None)
     return parser
 
 
@@ -113,11 +63,12 @@ def get_model_and_loss(args, device, n_frames=4):
                                                        n_channels=num_channels)
         criterion = train_utils.get_multiclass_loss(device, args.train_dataset_filepath)
     elif args.model_type == "multidiscrete":
-        n_classes_per_action = action_formatters.SSB64MultidiscreteActionFormatter.N_CLASSES
+        n_classes_per_action = action_formatters.SSB64MultiDiscreteActionFormatter.N_CLASSES
         model = models.MultiframeMultidiscreteActionModel(n_classes_per_action=n_classes_per_action,
                                                           n_frames=n_frames,
                                                           n_channels=num_channels)
-        criterion = train_utils.get_multidiscrete_loss(device, args.train_dataset_filepath)
+        criterion = train_utils.get_multidiscrete_loss(n_classes_per_action, device,
+                                                       args.train_dataset_filepath)
     elif args.model_type == "recurrent_multiclass":
         action_dim = action_formatters.SSB64MulticlassActionFormatter().n_classes
         model = models.RecurrentMulticlassActionModel(output_dim=action_dim,
@@ -128,7 +79,7 @@ def get_model_and_loss(args, device, n_frames=4):
         raise ValueError("Invalid model type: {}".format(args.model_type))
 
     # Load network weights if provided.
-    if args.load_filepath is not None:
+    if args.load_filepath:
         assert os.path.exists(args.load_filepath)
         model.load_state_dict(torch.load(args.load_filepath))
 
@@ -136,12 +87,17 @@ def get_model_and_loss(args, device, n_frames=4):
     return model, criterion
 
 
-def _get_dataset(dataset_filepath, img_directory, image_type, obs_transform, debug_size, dataset_type):
+def _get_dataset(dataset_filepath, img_directory, image_type, obs_transform, debug_size, dataset_type,
+                 model_type):
     assert os.path.exists(dataset_filepath)
+
+    if model_type == "multiclass":
+        action_transform = lambda x: np.argmax(np.array(x))
+    else:
+        action_transform = lambda x: x
 
     if dataset_type == "preprocessed":
         # Action transform required because actions stored as one-hot in dataset.
-        action_transform = lambda x: np.argmax(np.array(x))
         dataset = datasets.PreprocessedMultiframeDataset(dataset_filepath,
                                                          img_directory,
                                                          transform=None,
@@ -149,8 +105,6 @@ def _get_dataset(dataset_filepath, img_directory, image_type, obs_transform, deb
                                                          debug_size=debug_size)
     elif dataset_type == "images":
         assert os.path.exists(img_directory)
-        # Action transform required because actions stored as one-hot in dataset.
-        action_transform = lambda x: np.argmax(np.array(x))
         dataset = datasets.MultiframeDataset(dataset_filepath,
                                              img_directory,
                                              image_type=image_type,
@@ -170,13 +124,13 @@ def get_data_loaders(args):
     num_workers = train_utils.get_num_workers()
 
     train_dataset = _get_dataset(args.train_dataset_filepath, args.img_directory, args.image_type,
-                                 obs_transform, args.debug_size, args.dataset_type)
+                                 obs_transform, args.debug_size, args.dataset_type, args.model_type)
     train_loader = torch.utils.data.DataLoader(train_dataset,
                                                batch_size=args.batch_size,
-                                               shuffle=not args.dont_shuffle,
+                                               shuffle=args.shuffle,
                                                num_workers=num_workers)
     val_dataset = _get_dataset(args.val_dataset_filepath, args.img_directory, args.image_type, obs_transform,
-                               args.val_debug_size, args.dataset_type)
+                               args.val_debug_size, args.dataset_type, args.model_type)
     val_loader = torch.utils.data.DataLoader(val_dataset,
                                              batch_size=args.batch_size,
                                              shuffle=False,
@@ -187,12 +141,8 @@ def get_data_loaders(args):
 
 def get_optimizer(args, model):
     if args.opt_type == "adam":
-        if args.opt_lr is None:
-            args.opt_lr = 0.0002
         return torch.optim.Adam(model.parameters(), lr=args.opt_lr, weight_decay=args.opt_weight_decay)
     elif args.opt_type == "sgd":
-        if args.opt_lr is None:
-            args.opt_lr = 0.02
         return torch.optim.SGD(model.parameters(),
                                lr=args.opt_lr,
                                momentum=args.opt_momentum,
@@ -203,12 +153,12 @@ def get_optimizer(args, model):
 
 def main():
     args = get_parser().parse_args()
-    device = train_utils.get_device()
-
-    # Print out some information about the datasets.
+    args = hparams.merge_args_hparams(args)
+    train_utils.save_json(os.path.join(args.exp_directory, "config.json"), args.__dict__)
     train_utils.log_training_information(args)
 
     # Build data loaders, model, and optimizer.
+    device = train_utils.get_device()
     train_loader, val_loader = get_data_loaders(args)
     model, criterion = get_model_and_loss(args, device)
     optimizer = get_optimizer(args, model)
