@@ -35,7 +35,8 @@ action_dim = SSB64MulticlassActionFormatter().n_classes
 model = MultiframeMulticlassActionModel(num_classes=action_dim, n_channels=1)
 model.eval()
 
-weights_filepath = "/Users/wulfebw/Programming/mupen64plus-mybuild/data/networks/regular_model_20.pth"
+# weights_filepath = "/Users/wulfebw/Programming/mupen64plus-mybuild/data/networks/regular_model_20.pth"
+weights_filepath = "../../data/experiments/multiclass/test_4/networks/ssb64_model_8_loss=1.786695.pth"
 model.load_state_dict(torch.load(weights_filepath, map_location="cpu"))
 
 # '''
