@@ -11,26 +11,28 @@ import torch
 
 import deploy_utils as utils
 
+from ssb64bc.datasets.utils import get_image_transforms, get_image_mean_std
+from ssb64bc.formatting.action_formatters import (SSB64MulticlassActionFormatter,
+                                                  SSB64MultiDiscreteActionFormatter)
+from ssb64bc.models.models import MultiframeMulticlassActionModel
 sys.path.append("/Users/wulfebw/Programming/mupen64plus-mybuild/scripts")
-import format_dataset
-import datasets
-import models
+# import format_dataset
+# import datasets
+# import models
 
-
-# mean = np.array([90, 150, 120]) / 255.0
-mean = np.array([120]) / 255.0
-std = [1]
-transforms = datasets.get_image_transforms(mean, std)
+mean, std = get_image_mean_std("grayscale")
+transforms = get_image_transforms(mean, std)
 
 # n_classes_per_action = (2, 2, 2, 2, 2, 2, 3, 3)
 # model = models.MultiframeNonexclusiveActionModel(n_classes_per_action)
-n_channels = 1
-action_dim = 23
-model = models.MultiframeMulticlassActionModel(output_dim=action_dim,
-                                               n_channels=n_channels)
-model = models.MultiframeMulticlassResnetActionModel(num_classes=action_dim)
-# n_classes_per_action = format_dataset.SSB64MultiDiscreteActionFormatter.N_CLASSES
+# n_channels = 1
+# action_dim = 23
+# model = models.MultiframeMulticlassActionModel(output_dim=action_dim, n_channels=n_channels)
+# model = models.MultiframeMulticlassResnetActionModel(num_classes=action_dim)
+# n_classes_per_action = SSB64MultiDiscreteActionFormatter.N_CLASSES
 # model = models.MultiFrameMultiDiscreteActionModel(n_classes_per_action)
+action_dim = SSB64MulticlassActionFormatter().n_classes
+model = MultiframeMulticlassActionModel(num_classes=action_dim, n_channels=1)
 model.eval()
 
 weights_filepath = "/Users/wulfebw/Programming/mupen64plus-mybuild/data/networks/regular_model_20.pth"
@@ -92,9 +94,11 @@ model.load_state_dict(torch.load(weights_filepath, map_location="cpu"))
 
 #     return np.array(act).tolist()
 
+
 def get_random_action():
     idx = np.random.randint(action_dim)
-    return format_dataset.SSB64MulticlassActionFormatter.i2a(idx)
+    return SSB64MulticlassActionFormatter.i2a(idx)
+
 
 def get_action_exclusive(x, sample=True, sample_strat="multinomial"):
     x = torch.cat(list(x), dim=0)
@@ -119,7 +123,7 @@ def get_action_exclusive(x, sample=True, sample_strat="multinomial"):
     print([round(p, 2) for p in np.array(probs).reshape(-1)])
     print(idx)
 
-    return format_dataset.SSB64MulticlassActionFormatter.i2a(idx)
+    return SSB64MulticlassActionFormatter.i2a(idx)
 
 
 def get_action_multi_discrete(x):
@@ -127,9 +131,7 @@ def get_action_multi_discrete(x):
     x = x.view(1, x.shape[0], x.shape[1], x.shape[2])
     probs = np.array(model.predict(x)).reshape(-1)
 
-    edges = [0] + list(
-        np.cumsum(format_dataset.SSB64MultiDiscreteActionFormatter.N_CLASSES).
-        astype(int))
+    edges = [0] + list(np.cumsum(SSB64MultiDiscreteActionFormatter.N_CLASSES).astype(int))
     idxs = []
 
     print()
@@ -138,14 +140,13 @@ def get_action_multi_discrete(x):
         idx = utils.sample_probs(probs[start:end])
         idxs.append(idx)
     print(idxs)
-    return format_dataset.SSB64MultiDiscreteActionFormatter.indices_to_action(
-        idxs)
+    return SSB64MultiDiscreteActionFormatter.indices_to_action(idxs)
 
 
 def main():
     env = gym.make('Smash-mario-v0')
     env.reset()
-    
+
     utils.manual_navigate(env)
     # utils.navigate_to_practice(env)
 
@@ -184,17 +185,13 @@ def main():
             # plt.imshow(np.array(d[-1]).transpose(2,1,0)[:,:,0])
             # plt.savefig("/Users/wulfebw/Desktop/tmpimgs/{}.png".format(i))
 
+            #    a = get_random_action()
 
-        #    a = get_random_action()
-            
             d.append(transforms(obs))
-            a = get_action_exclusive(d,
-                                     sample=False,
-                                     sample_strat="multinomial")
+            a = get_action_exclusive(d, sample=False, sample_strat="multinomial")
 
             # a = get_action_multi_discrete(d)
-            avg_obs_timestep_diff = avg_obs_timestep_diff * 0.95 + 0.05 * (
-                time.time() - last_obs_timestep)
+            avg_obs_timestep_diff = avg_obs_timestep_diff * 0.95 + 0.05 * (time.time() - last_obs_timestep)
             last_obs_timestep = time.time()
 
         if i % 10 == 0:
