@@ -15,7 +15,7 @@ import h5py
 import numpy as np
 import pandas as pd
 
-from ssb64bc.datasets.utils import get_image_transforms, get_image_mean_std
+from ssb64bc.datasets.utils import get_image_transforms_for_encoding
 import ssb64bc.formatting.action_formatters as action_formatters
 from ssb64bc.formatting.match_data import MatchData
 from ssb64bc.formatting.multi_frame_dataset_formatter import MultiframeDatasetFormatter
@@ -25,10 +25,12 @@ import format_dataset
 import utils
 
 
-def get_image_shape():
+def get_image_shape(img_dir, dataset_filepath, transforms, encoding):
     """Get the shape of a preprocessed image."""
-    # TODO: Get the shape by applying the transform to the first image.
-    return (1, 224, 298)
+    df = pd.read_csv(dataset_filepath)
+    img_filepath = os.path.join(img_dir, df.iloc[0]["frame_0"])
+    img = utils.preprocess_image(img_filepath, transforms, encoding).numpy()
+    return img.shape
 
 
 def get_num_samples(filepaths, max_seq_len):
@@ -65,13 +67,15 @@ def preprocess_datasets(filepaths, img_dir, args):
     assert args.overwrite_preprocessing or not os.path.exists(args.output_filepath)
 
     h5file = h5py.File(args.output_filepath, "w", libver='latest')
-
     num_samples = get_num_samples(filepaths, args.max_seq_len)
 
-    transforms = get_image_transforms(*get_image_mean_std("grayscale"))
-    images_shape = (num_samples, ) + (args.max_seq_len, ) + get_image_shape()
+    encoding = utils.get_cv2_encoding_from_string(args.preprocess_encoding)
+    transforms = get_image_transforms_for_encoding(encoding=encoding, resize=args.preprocess_resize)
+
+    image_shape = get_image_shape(img_dir, filepaths[0], transforms, encoding)
+    images_shape = (num_samples, ) + (args.max_seq_len, ) + image_shape
     print("Shape of images: {}".format(images_shape))
-    chunk_shape = (min(100, num_samples), ) + (args.max_seq_len, ) + get_image_shape()
+    chunk_shape = (min(100, num_samples), ) + (args.max_seq_len, ) + image_shape
     images_dset = h5file.create_dataset("imgs", images_shape, dtype=np.float32, chunks=chunk_shape)
 
     action_keys = get_act_cols(pd.read_csv(filepaths[0]))
@@ -85,8 +89,8 @@ def preprocess_datasets(filepaths, img_dir, args):
         df = pd.read_csv(filepath)
         n_timesteps = len(df)
         for timestep, (index, row) in enumerate(df.iterrows()):
-            sys.stdout.write("\rtimestep: {} / {} match: {} / {}".format(timestep + 1, n_timesteps, i + 1,
-                                                                         n_filepaths))
+            sys.stdout.write("\rtimestep: {} / {} match: {} / {}".format(
+                timestep + 1, n_timesteps, i + 1, n_filepaths))
             timestep_idx = timestep % args.max_seq_len
             if timestep_idx == 0 and timestep != 0:
                 sample_idx += 1
@@ -95,19 +99,20 @@ def preprocess_datasets(filepaths, img_dir, args):
                     break
 
             image_filepath = os.path.join(img_dir, row["frame_0"])
-            images_dset[sample_idx, timestep_idx, ...] = utils.preprocess_image(image_filepath,
-                                                                                transforms).numpy()
+            images_dset[sample_idx, timestep_idx,
+                        ...] = utils.preprocess_image(image_filepath, transforms, encoding).numpy()
             actions_dset[sample_idx, timestep_idx, ...] = list(row[action_keys])
 
     h5file.close()
 
 
 def add_recurrent_arguments(parser):
-    parser.add_argument('--output_filepath',
-                        type=str,
-                        help=("Filepath to output preprocessed dataset file."
-                              " This is required because in the recurrent case matches are combined."),
-                        required=True)
+    parser.add_argument(
+        '--output_filepath',
+        type=str,
+        help=("Filepath to output preprocessed dataset file."
+              " This is required because in the recurrent case matches are combined."),
+        required=True)
     parser.add_argument('--max_seq_len',
                         type=int,
                         help=("The maximum length of a sample in the dataset."

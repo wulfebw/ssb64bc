@@ -5,6 +5,7 @@ import cv2
 import h5py
 import imageio
 import numpy as np
+from PIL import Image
 
 
 def decode_action(action_keys, action):
@@ -36,6 +37,8 @@ def generate_preview(dataset_filepath, output_dir):
     for action, image in zip(actions, images):
         if image.shape[-1] > 4:
             image = image.transpose(1, 2, 0)
+        image = cv2.UMat(image)
+
         action_text = decode_action(h5file.attrs["action_keys"], action)
         text_images += [
             cv2.putText(img=image,
@@ -53,19 +56,25 @@ def generate_preview(dataset_filepath, output_dir):
 
 def get_parser():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--dataset_filepath', type=str, help="Dataset file to preview.", required=True)
+    parser.add_argument('--dataset_filepath',
+                        type=str,
+                        help="Dataset file to preview.",
+                        required=True)
     parser.add_argument('--preview_dir',
                         type=str,
                         help="Directory to output preview files to.",
                         required=True)
-    parser.add_argument('--num_previews', type=int, default=5, help="Number of previews to generate.")
+    parser.add_argument('--num_previews',
+                        type=int,
+                        default=5,
+                        help="Number of previews to generate.")
     return parser
 
 
 def main():
     args = get_parser().parse_args()
     assert os.path.exists(args.dataset_filepath)
-    assert os.path.exists(args.preview_dir)
+    os.makedirs(args.preview_dir, exist_ok=True)
     for _ in range(args.num_previews):
         generate_preview(args.dataset_filepath, args.preview_dir)
 

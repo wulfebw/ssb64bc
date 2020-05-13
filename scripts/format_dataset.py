@@ -39,7 +39,8 @@ def balance_noops_multiclass(df, max_fraction):
         return df
 
     all_noop_indices = df.index[df["NOOP"] == 1]
-    noop_indices_to_remove = all_noop_indices[np.random.randint(len(all_noop_indices), size=num_to_remove)]
+    noop_indices_to_remove = all_noop_indices[np.random.randint(len(all_noop_indices),
+                                                                size=num_to_remove)]
 
     df = df.drop(index=noop_indices_to_remove)
     return df
@@ -98,7 +99,8 @@ def preprocess_dataset(dataset_filepath,
                        output_filepath,
                        preprocess_dir,
                        overwrite=False,
-                       encoding=cv2.IMREAD_GRAYSCALE):
+                       encoding=cv2.IMREAD_GRAYSCALE,
+                       resize=224):
     """Preprocess a dataset.
 
     This function preprocesses a dataset by applying a set of transforms and
@@ -106,7 +108,7 @@ def preprocess_dataset(dataset_filepath,
     a new dataframe that contains the relative paths of the images in the 
     preprocessed directory.
     """
-    transforms = get_image_transforms_for_encoding(encoding)
+    transforms = get_image_transforms_for_encoding(encoding, resize=resize)
 
     # Collect the list of filepaths to convert.
     df = pd.read_csv(dataset_filepath)
@@ -129,10 +131,12 @@ def preprocess_dataset(dataset_filepath,
         if not os.path.exists(output_dir):
             pathlib.Path(output_dir).mkdir(parents=True, exist_ok=True)
         output_tensor_filepath = os.path.join(output_dir,
-                                              os.path.basename(relative_filename)).replace(IMG_EXT, ".pth")
+                                              os.path.basename(relative_filename)).replace(
+                                                  IMG_EXT, ".pth")
 
         if overwrite or not os.path.exists(output_tensor_filepath):
-            utils.preprocess_and_save_image(image_filepath, output_tensor_filepath, transforms, encoding)
+            utils.preprocess_and_save_image(image_filepath, output_tensor_filepath, transforms,
+                                            encoding)
 
     # Create the modified dataframe.
     tensor_df = df
@@ -176,11 +180,12 @@ def get_parser():
                         type=str,
                         help="Directories of the recorded data from the matchs to format.",
                         required=True)
-    parser.add_argument('--dataset_dir',
-                        type=str,
-                        help=("Directory to store datasets in general."
-                              " The actual directory name will be inferred from the match directory."),
-                        required=True)
+    parser.add_argument(
+        '--dataset_dir',
+        type=str,
+        help=("Directory to store datasets in general."
+              " The actual directory name will be inferred from the match directory."),
+        required=True)
     parser.add_argument('--action_format',
                         type=str,
                         help=("The action format to use {multiclass, multidiscrete}."),
@@ -188,13 +193,26 @@ def get_parser():
     parser.add_argument('--preprocess_dataset',
                         action="store_true",
                         help="Whether to preprocess the dataset.")
+    parser.add_argument('--preprocess_resize',
+                        type=int,
+                        help="The size to reduce to smaller edge of the image to.",
+                        required=False,
+                        default=224)
+    parser.add_argument('--preprocess_encoding',
+                        type=str,
+                        help="The image encoding to use {color, grayscale}.",
+                        required=False,
+                        default="grayscale")
     parser.add_argument('--overwrite_formatting',
                         action="store_true",
                         help="Whether to redo formatting if it already exists.")
     parser.add_argument('--overwrite_preprocessing',
                         action="store_true",
                         help="Whether to redo preprocessing if it already exists.")
-    parser.add_argument('--n_frames', type=int, help=("Number of frames to use in a sample."), default=4)
+    parser.add_argument('--n_frames',
+                        type=int,
+                        help=("Number of frames to use in a sample."),
+                        default=4)
     parser.add_argument('--noop_max_dataset_fraction',
                         type=float,
                         help=("If provided, balances noops such that they"
@@ -225,8 +243,14 @@ def main():
             match_key = utils.match_key_from_match_dir(match_dir)
             preprocess_dataset_filepath = os.path.join(args.dataset_dir,
                                                        "preprocessed_{}.csv".format(match_key))
-            preprocess_dataset(dataset_filepath, img_dir, preprocess_dataset_filepath, args.dataset_dir,
-                               args.overwrite_preprocessing)
+            preprocess_dataset(dataset_filepath,
+                               img_dir,
+                               preprocess_dataset_filepath,
+                               args.dataset_dir,
+                               args.overwrite_preprocessing,
+                               encoding=utils.get_cv2_encoding_from_string(
+                                   args.preprocess_encoding),
+                               resize=args.preprocess_resize)
 
 
 if __name__ == "__main__":
